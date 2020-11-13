@@ -1,0 +1,107 @@
+---
+title: "Hausaufgabe3"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+```
+
+# Alle Bücher-Datensätze in eine Datei (all) packen.
+
+
+```{r}
+BX_Book_Ratings <- read_delim("BX-Book-Ratings.csv", 
+    ";", escape_double = FALSE, trim_ws = TRUE)
+BX_Books <- read_delim("BX-Books.csv", 
+    ";", escape_double = FALSE, trim_ws = TRUE)
+BX_Users <- read_delim("BX-Users.csv", 
+    ";", escape_double = FALSE, trim_ws = TRUE)
+```
+```{r}
+books <- BX_Books %>%
+  select(ISBN,`Book-Title`,`Book-Author`,`Year-Of-Publication`,Publisher)
+rm(BX_Books)
+users <- BX_Users %>%
+  mutate(Age = as.numeric(Age))
+rm(BX_Users)
+ratings <- BX_Book_Ratings %>%
+  left_join(books)
+rm(BX_Book_Ratings)
+ratings <- ratings %>%
+  filter(!is.na(`Book-Title`))
+users <- users %>%
+  filter(!is.na(Age)) %>%
+  mutate(country = str_remove(Location,".*,")) %>%
+  filter(country != "")
+all <- ratings %>%
+  left_join(users) %>%
+  select(-Location)
+write_csv(all, "all.csv")
+```
+
+# Warenkorb-Analyse
+
+
+```{r}
+library(arules)
+library(arulesViz)
+```
+
+
+```{r}
+all <- read_csv("all.csv")
+```
+```{r message=FALSE}
+i <- split(all$`Book-Title`,all$`User-ID`)
+txn <- as(i, "transactions")
+basket_rules <- apriori(txn, parameter = list(sup = 0.0015, conf = 0.001, minlen=2, target="rules"))
+```
+
+```{r}
+myRules_Direct <- as(basket_rules, "data.frame")
+basket_rules_hi <- head(basket_rules, by ="lift",100)
+head(myRules_Direct, 20)
+```
+
+```{r}
+plot(basket_rules_hi, method="graph", main="Books")
+```
+
+# Erstellen Sie eine Analyse, bei der nicht die Bücher, sondern die Autoren in den Transaktionen enthalten sind
+
+
+```{r message=FALSE}
+i <- split(all$`Book-Author`,all$`User-ID`)
+txn <- as(i, "transactions")
+basket_rules <- apriori(txn, parameter = list(sup = 0.0015, conf = 0.001, minlen=2, target="rules"))
+```
+
+
+```{r}
+myRules_Direct <- as(basket_rules, "data.frame")
+basket_rules_hi <- head(basket_rules, by ="lift",100)
+head(myRules_Direct, 20)
+```
+
+
+```{r}
+plot(basket_rules_hi, method="graph", main="Author")
+```
+
+# Fällt Ihnen etwas in der Datenqualität auf?
+
+# Mich irritiert, dass sich in jeder zweiten Zeile die Reihenfolge der gelesenen Autoren umdreht. Zum Beispiel in den Zeilen 19 und 20: 
+# Wer Oscar Wilde gelesen hat, wird mit einer Wahrscheinlichkeit von über 30 Prozent Stephen King lesen. Und wer Stephen King gelesen hat, wird mit einer viel viel geringeren Wahrscheinlichkeit Oscar Wilde lesen. 
+# Ich weiß nicht, ob das stimmen kann. 
+# Außerdem fällt mir auf, dass die Wahrscheinlichkeiten in den ungeraden Zeilen recht hoch sind, also sich, soweit ich es sehe, immer zwischen ca. 30 und 60 Prozent bewegen.
+
+# Wie könnte man das mit regulären Ausdrücken beheben?
+
+# Falls es wirklich so sein sollte, dass jede zweite Zeile Murks ist, könnte man diese vielleicht streichen, indem man mit "select" nur die ungeraden Zeilen auswählt.
+
+# Wie kann man nun noch sicherstellen, dass nur die Autoren weiterempfohlen werden, deren Bücher man auch (mehrheitlich) gut fand?
+
+# Indem beispielsweise nur Autoren empfohlen werden, von denen man schon mehr Bücher gelesen hat oder die man mit einer relativ hohen Wahrscheinlichkeit lesen wird, sobald man das Buch des Autors x gelesen hat. 
+# Man setzt also fest, wie hoch diese Wahrscheinlichkeit mindestens sein soll, damit das Buch empfohlen wird. Zum Beispiel > 40 % 
+
